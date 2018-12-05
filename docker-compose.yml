@@ -1,0 +1,62 @@
+version: '2.1'
+services:
+  kong:
+    network_mode: host
+    image: "${KONG_DOCKER_TAG:-kong:latest}"
+    command: kong start --run-migrations
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: '0.0.0.0:8001'
+      KONG_CASSANDRA_CONTACT_POINTS: localhost
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: ${KONG_PG_DATABASE:-kong}
+      KONG_PG_HOST: localhost
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD:-kong}
+      KONG_PG_USER: ${KONG_PG_USER:-kong}
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001"]
+      interval: 3s
+      timeout: 3s
+      retries: 180
+    ports:
+      - "8000:8000/tcp"
+      - "8001:8001/tcp"
+      - "8443:8443/tcp"
+      - "8444:8444/tcp"
+    restart: on-failure
+  db:
+    image: postgres:9.5
+    environment:
+      POSTGRES_DB: ${KONG_PG_DATABASE:-kong}
+      POSTGRES_PASSWORD: ${KONG_PG_PASSWORD:-kong}
+      POSTGRES_USER: ${KONG_PG_USER:-kong}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${KONG_PG_USER:-kong}"]
+      interval: 3s
+      timeout: 3s
+      retries: 180
+    restart: on-failure
+    stdin_open: true
+    tty: true
+    ports:
+      - "5432:5432/tcp"
+  kong-dasboard:
+      network_mode: host
+      image: pgbi/kong-dashboard
+      command: start --kong-url http://localhost:8001
+      depends_on:
+        kong:
+          condition: service_healthy
+      ports:
+        - "8080:8080"
+      restart: on-failure
+  echo:
+    image: kennship/http-echo
+    ports:
+      - "3000:3000/tcp"
